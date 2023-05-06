@@ -32,7 +32,7 @@ _get_window_size :: proc() -> [2]int {
 	using win
 	sbi: CONSOLE_SCREEN_BUFFER_INFO
 	ok := GetConsoleScreenBufferInfo(HANDLE(os.stdout), &sbi)
-	if !ok {panic("faied to get screen info")}
+	if !ok {panic("failed to get screen info")}
 
 	dims := [2]int{
 		int(sbi.srWindow.Bottom - sbi.srWindow.Top) + 1,
