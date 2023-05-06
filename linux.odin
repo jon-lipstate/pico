@@ -1,4 +1,4 @@
-// +build linux
+// +build linux, darwin
 package pico
 import libc "core:c/libc"
 import "core:c"
@@ -11,6 +11,46 @@ foreign _libc {
 	ioctl :: proc(fd: os.Handle, request: c.int, #c_vararg args: ..any) -> c.int ---
 	tcgetattr :: proc(fd: os.Handle, termios_p: ^termios) -> c.int ---
 	tcsetattr :: proc(fd: os.Handle, optional_actions: TCSetAttr_Optional_Actions, termios_p: ^termios) -> c.int ---
+}
+
+prev_term: termios
+
+_set_terminal :: proc() {
+	if tcgetattr(os.stdin, &prev_term) < 0 {
+		panic("failed to GET terminal state")
+	}
+	term := prev_term
+	term.c_iflag &= ~u32(BRKINT | ICRNL | INPCK | ISTRIP | IXON)
+	term.c_oflag &= ~u32(OPOST)
+	term.c_cflag |= u32(CS8) // ascii
+	term.c_lflag &= ~u32(ECHO | ICANON | IEXTEN | ISIG)
+	term.c_cc[VMIN] = 0
+	term.c_cc[VTIME] = 0
+
+	if tcsetattr(os.stdout, .FLUSH, &term) < 0 {
+		panic("failed to SET terminal state")
+	}
+}
+
+_restore_terminal :: proc() {
+	tcsetattr(os.stdin, .FLUSH, &prev_term)
+}
+
+_get_window_size :: proc() -> [2]int {
+	ws := winsize{}
+	io_res := ioctl(os.stdout, TIOCGWINSZ, &ws)
+	assert(io_res >= 0, "didnt get window size")
+	dims := [2]int{int(ws.ws_row), int(ws.ws_col)}
+	return dims
+}
+
+// from termios.h
+TIOCGWINSZ :: 0x5413
+winsize :: struct {
+	ws_row:    u16, /* rows, in characters */
+	ws_col:    u16, /* columns, in characters */
+	ws_xpixel: u16, /* horizontal size, pixels */
+	ws_ypixel: u16, /* vertical size, pixels */
 }
 
 // From /usr/include/asm-generic/termbits.h
