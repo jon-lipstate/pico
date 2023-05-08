@@ -4,7 +4,10 @@ A small demonstrator text editor written in Odin. Inspired by the the nano edito
 
 Works for both POSIX & Windows
 
-## Video Stream
+## Video Streams
 
+Part 1: (Ansi Codes, Platform Raw Mode):
 https://youtu.be/f64jNXptMEo
 
+Part 1a: (Subpackage) Gap Buffer Implementation:
+https://youtu.be/agUiYkvkoVg
