@@ -21,7 +21,7 @@ calculate_lines :: proc(b: ^TextBuffer) {
 		if left[i] == '\n' {append(&b.lines, i + 1)}
 	}
 	for i := 0; i < len(right); i += 1 {
-		if left[i] == '\n' {append(&b.lines, len(left) + i + 1)}
+		if right[i] == '\n' {append(&b.lines, len(left) + i + 1)}
 	}
 }
 
@@ -71,12 +71,12 @@ print_range :: proc(b: ^TextBuffer, buf: ^strings.Builder, start_cursor, end_cur
 	assert(end_cursor <= length_of(b), "invalid end")
 
 	left_len := len(left)
-	if end_cursor < left_len {
+	if end_cursor <= left_len {
 		strings.write_string(buf, left[start_cursor:end_cursor])
 	} else if start_cursor >= left_len {
-		strings.write_string(buf, right[start_cursor:end_cursor])
+		strings.write_string(buf, right[start_cursor - left_len:end_cursor - left_len])
 	} else {
 		strings.write_string(buf, left[start_cursor:])
-		strings.write_string(buf, right[:end_cursor])
+		strings.write_string(buf, right[0:end_cursor - left_len])
 	}
 }
