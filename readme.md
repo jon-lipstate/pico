@@ -6,11 +6,10 @@ Works for both POSIX & Windows
 
 ## Video Streams
 
-Part 1: (Ansi Codes, Platform Raw Mode):
-https://youtu.be/f64jNXptMEo
+Part 1: (Ansi Codes, Platform Raw Mode): https://youtu.be/f64jNXptMEo
 
-Part 1a: (Subpackage) Gap Buffer:
-https://youtu.be/agUiYkvkoVg
+Part 1a: (Subpackage) Gap Buffer: https://youtu.be/agUiYkvkoVg
 
-Part 2a: TextBuffer Abstraction:
-https://youtu.be/_8tVObGKQ3k
+Part 1b: TextBuffer Abstraction: https://youtu.be/_8tVObGKQ3k
+
+Part 2: File to Screenspace: https://youtu.be/lRVL73DAFRQ
