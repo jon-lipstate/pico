@@ -3,28 +3,16 @@ import "core:unicode/utf8"
 import "core:mem"
 import "core:runtime"
 
-//Demo code:
-// import "core:fmt"
-// main :: proc() {
-// 	//
-// 	b := make_gap_buffer(2)
-// 	// insert_char(&b, 0, '0')
-// 	// insert_rune(&b, 1, '1')
-// 	// insert(&b, 2, "2345678")
-// 	// insert(&b, 0, rune('a'))
-// 	insert(&b, 0, "012456789")
-// 	insert(&b, 3, "3")
-// 	fmt.println(get_strings(&b))
-// 	remove(&b, 1, 8)
-// 	fmt.println(get_strings(&b))
-// }
-
 BufferPosition :: int
 GapBuffer :: struct {
 	buf:       []u8, // Should be dynamic?
 	gap_start: BufferPosition,
 	gap_end:   BufferPosition,
 	allocator: runtime.Allocator,
+}
+length_of :: proc(b: ^GapBuffer) -> int {
+	gap := b.gap_end - b.gap_start
+	return len(b.buf) - gap
 }
 // Gets strings that point into the left and right sides of the gap. Note that this is neither thread, or even operation safe.
 // Strings need to be immediately cloned or operated on prior to editing the buffer again.
@@ -49,8 +37,7 @@ destroy_gap_buffer :: proc(b: ^GapBuffer) {
 // Moves the Gap to the cursor position. Cursors are clamped [0,n) where n is the filled count of the buffer.
 shift_gap_to :: proc(b: ^GapBuffer, cursor: BufferPosition) {
 	gap_len := b.gap_end - b.gap_start
-	cursor := min(cursor, len(b.buf) - gap_len)
-	if cursor < 0 {cursor = 0}
+	cursor := clamp(cursor, 0, len(b.buf) - gap_len)
 	if cursor == b.gap_start {return}
 
 	if b.gap_start < cursor {
@@ -92,8 +79,11 @@ check_gap_size :: proc(b: ^GapBuffer, n_required: int) {
 // Note: Do not rely on the gap being 0, remove will leave as-is values behind in the gap  
 // WARNING: Does not protect for unicode at present, simply deletes bytes  
 remove :: proc(b: ^GapBuffer, cursor: BufferPosition, count: int) {
-	shift_gap_to(b, cursor)
-	b.gap_end = min(b.gap_end + count, len(b.buf))
+	n_del := abs(count)
+	eff_cursor := cursor
+	if count < 0 {eff_cursor = max(0, eff_cursor - n_del)}
+	shift_gap_to(b, eff_cursor)
+	b.gap_end = min(b.gap_end + n_del, len(b.buf))
 }
 // Inserts into the gap buffer, note that rune and char collide, so they need wrapped in a cast to inform the compiler which you're calling
 insert :: proc {

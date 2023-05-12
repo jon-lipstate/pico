@@ -9,5 +9,8 @@ Works for both POSIX & Windows
 Part 1: (Ansi Codes, Platform Raw Mode):
 https://youtu.be/f64jNXptMEo
 
-Part 1a: (Subpackage) Gap Buffer Implementation:
+Part 1a: (Subpackage) Gap Buffer:
 https://youtu.be/agUiYkvkoVg
+
+Part 2a: TextBuffer Abstraction:
+https://youtu.be/_8tVObGKQ3k
