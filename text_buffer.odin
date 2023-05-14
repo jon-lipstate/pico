@@ -1,12 +1,21 @@
 package pico
 import "core:strings"
 import "core:fmt"
+import "core:os"
 import "./gap_buffer"
 
 TextBuffer :: struct {
 	using gb: gap_buffer.GapBuffer,
 	cursor:   int, // sb terminal?
 	lines:    [dynamic]int, //starts_at
+}
+make_text_buffer :: proc(n_bytes: int = 64) -> TextBuffer {
+	b := TextBuffer{}
+	b.gb = gap_buffer.make_gap_buffer(max(64, n_bytes))
+	return b
+}
+destroy_text_buffer :: proc(b: ^TextBuffer) {
+	gap_buffer.destroy_gap_buffer(&b.gb)
 }
 // O(n)
 calculate_lines :: proc(b: ^TextBuffer) {
@@ -47,7 +56,31 @@ insert_at :: proc(b: ^TextBuffer, cursor: int, s: string) {
 	b.cursor += len(s)
 	calculate_lines(b)
 }
-
+// TODO: File Cursors(?)
+insert_file_at :: proc(b: ^TextBuffer, cursor: int, handle: os.Handle) -> (ok: bool) {
+	if handle == os.INVALID_HANDLE {return false}
+	fs, err := os.file_size(handle)
+	if err < 0 {return false}
+	gap_buffer.check_gap_size(&b.gb, int(fs))
+	gap_buffer.shift_gap_to(&b.gb, cursor)
+	gb_slice := b.buf[b.gap_start:b.gap_end]
+	n, rerr := os.read(handle, gb_slice)
+	fmt.assertf(rerr > -1, "read err 0x%x", -rerr)
+	assert(n == int(fs), "mismatched os.read")
+	b.gap_start += n
+	calculate_lines(b)
+	return true
+}
+// TODO: Buffer/File Cursors (?)
+// NOTE: Seeks to Start of File
+flush_to_file :: proc(b: ^TextBuffer, handle: os.Handle) -> (ok: bool) {
+	if handle == os.INVALID_HANDLE {return false}
+	os.seek(handle, 0, os.SEEK_SET)
+	left, right := gap_buffer.get_strings(&b.gb)
+	os.write_string(handle, left)
+	os.write_string(handle, right)
+	return true
+}
 remove_at :: proc(b: ^TextBuffer, cursor: int, count: int) {
 	eff_cursor := cursor
 	if count < 0 {eff_cursor -= 2} 	// Backspace
@@ -56,13 +89,13 @@ remove_at :: proc(b: ^TextBuffer, cursor: int, count: int) {
 	calculate_lines(b)
 }
 // TODO: actual UTF8 support
-rune_at :: proc(b: ^TextBuffer) -> rune {
-	cursor := clamp(b.cursor, 0, length_of(b) - 1)
+rune_at :: proc(b: ^TextBuffer, cursor: int) -> rune {
+	cursor := clamp(cursor, 0, length_of(b) - 1)
 	left, right := gap_buffer.get_strings(&b.gb)
 	if cursor < len(left) {
 		return rune(left[cursor])
 	} else {
-		return rune(right[cursor])
+		return rune(right[cursor - len(left)])
 	}
 }
 print_range :: proc(b: ^TextBuffer, buf: ^strings.Builder, start_cursor, end_cursor: int) {

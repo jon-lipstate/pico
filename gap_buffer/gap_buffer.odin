@@ -106,7 +106,7 @@ insert_rune :: proc(b: ^GapBuffer, cursor: BufferPosition, r: rune) {
 insert_slice :: proc(b: ^GapBuffer, cursor: BufferPosition, slice: []u8) {
 	check_gap_size(b, len(slice))
 	shift_gap_to(b, cursor)
-	copy_slice(b.buf[b.gap_start:], slice)
+	copy_slice(b.buf[b.gap_start:b.gap_end], slice)
 	b.gap_start += len(slice)
 }
 insert_string :: proc(b: ^GapBuffer, cursor: BufferPosition, str: string) {

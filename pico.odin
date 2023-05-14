@@ -7,7 +7,6 @@ import "core:unicode/utf8"
 import "./ansi_codes"
 import "./gap_buffer"
 
-FILE :: "abc\nline"
 STATUS_LINE :: 1
 Terminal :: struct {
 	dims:          [2]int,
@@ -24,12 +23,11 @@ make_terminal :: proc(n_bytes: int = 4) -> Terminal {
 	t.status_line = make([dynamic]u8, t.dims.y)
 	clear_status_line(&t)
 	t.dims.x -= STATUS_LINE
-	t.buffer.gb = gap_buffer.make_gap_buffer(n_bytes) // TODO: wrap text_buffer make?
+	t.buffer = make_text_buffer(n_bytes)
 	t.render_cursor = {1, 1}
 	t.buffer.cursor = 0
 	return t
 }
-// TODO: destroy_terminal
 
 update_render_cursor :: proc(t: ^Terminal) {
 	abs_row := 0
@@ -58,7 +56,24 @@ update_render_cursor :: proc(t: ^Terminal) {
 	}
 	return
 }
+move_cursor_by_pages :: proc(t: ^Terminal, n: int) {
+	if len(t.buffer.lines) == 0 {return}
 
+	move_by := n * t.dims.x
+	requested_offset := move_by + t.line_offset
+	actual_offset := clamp(requested_offset, 0, len(t.buffer.lines) - t.dims.x)
+
+	overstep := abs(actual_offset - requested_offset) // todo:remove abs, not really needed
+	overstep *= n < 0 ? -1 : 1
+	t.line_offset = actual_offset
+
+	t.render_cursor.x = clamp(t.render_cursor.x + overstep, 1, t.dims.x)
+
+	abs_line := t.line_offset + t.render_cursor.x - 1
+	starts_at := t.buffer.lines[abs_line]
+	col := min(t.render_cursor.y - 1, line_length(&t.buffer, abs_line))
+	t.buffer.cursor = starts_at + col
+}
 move_cursor_by_lines :: proc(t: ^Terminal, n: int) {
 	if len(t.buffer.lines) == 0 {return}
 	row := (t.render_cursor.x - 1) + n
@@ -103,7 +118,7 @@ clear_status_line :: proc(t: ^Terminal) {
 write_status_line :: proc(t: ^Terminal) {
 	fmt.bprintf(
 		t.status_line[:],
-		"[%v,%v] | LineOffset: %v | File-Cursor: %v/%v | #Lines: %v",
+		"[%v,%v] | Offset: %v | Cursor: %v/%v | nLines: %v | CTRL+X: Save & Exit | CTRL+Q: Quit, No Save",
 		t.render_cursor.x,
 		t.render_cursor.y,
 		t.line_offset,
@@ -113,6 +128,10 @@ write_status_line :: proc(t: ^Terminal) {
 	)
 }
 get_visible_cursors :: proc(t: ^Terminal) -> (start, end: int) {
+	if len(t.buffer.lines) == 0 {
+		end = length_of(&t.buffer)
+		return
+	}
 	start = t.buffer.lines[t.line_offset]
 	last_line := min(len(t.buffer.lines) - 1, t.line_offset + t.dims.x)
 	if last_line == len(t.buffer.lines) - 1 {
@@ -124,13 +143,32 @@ get_visible_cursors :: proc(t: ^Terminal) -> (start, end: int) {
 }
 
 RUNNING := true
+SHOULD_SAVE := false
 main :: proc() {
+	args := os.args
+	if len(args) != 2 {
+		fmt.println("Invalid args - expected 'pico file_name.ext'")
+		os.exit(1)
+	}
+	f, e := os.open(args[1], os.O_CREATE | os.O_RDWR, 0o644)
+	if os.INVALID_HANDLE == f {fmt.println("Bad Handle");os.exit(1)}
+	if e < 0 {fmt.printf("File open error 0x%x", -e);os.exit(1)}
+
 	using ansi_codes
 	_set_terminal();defer _restore_terminal()
 	alt_buffer_mode(true);defer alt_buffer_mode(false)
 
-	t := make_terminal()
-	insert_at(&t.buffer, 0, FILE) // TODO: replace with os.read...
+	fs, err := os.file_size(f);assert(err > -1)
+	t := make_terminal(int(fs))
+	if fs > 0 {
+		ok := insert_file_at(&t.buffer, 0, f)
+		if !ok {
+			alt_buffer_mode(false)
+			_restore_terminal()
+			fmt.println("failed to read input file. aborting.")
+			os.exit(1)
+		}
+	}
 
 	// First Paint
 	t.buffer.cursor = 0
@@ -144,7 +182,13 @@ main :: proc() {
 		}
 		move_to(t.render_cursor.x, t.render_cursor.y)
 	}
-	fmt.println("END")
+	if SHOULD_SAVE {
+		os.close(f)
+		f, e = os.open(args[1], os.O_TRUNC | os.O_WRONLY, 0o644)
+		assert(e > -1, "Error")
+		assert(f != os.INVALID_HANDLE, "Bad Handle")
+		flush_to_file(&t.buffer, f)
+	}
 }
 
 render :: proc(t: ^Terminal) {
@@ -154,7 +198,7 @@ render :: proc(t: ^Terminal) {
 	write_status_line(t)
 	move_to(t.dims.x + STATUS_LINE, 0)
 	set_graphic_rendition(.Bright_Cyan_Background)
-	color_ansi(.Yellow)
+	color_ansi(.Black)
 	fmt.print(string(t.status_line[:]))
 	move_to(t.dims.x + STATUS_LINE, 0)
 	reset()
@@ -196,8 +240,12 @@ update :: proc(t: ^Terminal) -> bool {
 
 	for i := 0; i < n_read; i += 1 {
 		char := buf[i]
-		if char == CTRL_X {
+		if char == CTRL_Q {
 			RUNNING = false
+			break
+		} else if char == CTRL_X {
+			RUNNING = false
+			SHOULD_SAVE = true
 			break
 		}
 		if char == ESC {
@@ -214,6 +262,21 @@ update :: proc(t: ^Terminal) -> bool {
 					move_cursor_by_runes(t, -1)
 				case ARROW_RIGHT:
 					move_cursor_by_runes(t, 1)
+				case HOME:
+					n := t.render_cursor.y - 1
+					move_cursor_by_runes(t, -n)
+				case END:
+					current_line := t.line_offset + t.render_cursor.x - 1
+					ll := line_length(&t.buffer, current_line)
+					n := ll - t.render_cursor.y
+					move_cursor_by_runes(t, n)
+					// bandaid - sometimes end does not actually land on the end..?
+					r := rune_at(&t.buffer, t.buffer.cursor)
+					if r != '\n' {move_cursor_by_runes(t, 1)}
+				case PAGE_UP:
+					move_cursor_by_pages(t, -1)
+				case PAGE_DOWN:
+					move_cursor_by_pages(t, 1)
 				case 0x33:
 					if buf[i + 1] == DEL {
 						remove_at(&t.buffer, t.buffer.cursor, 1)
@@ -234,6 +297,7 @@ update :: proc(t: ^Terminal) -> bool {
 			if char == '\r' || char == '\n' {
 				insert_at(&t.buffer, t.buffer.cursor, "\n")
 			} else {
+				// TODO: prune non-ascii chars?
 				insert_at(&t.buffer, t.buffer.cursor, string(s[:]))
 			}
 		}
@@ -246,6 +310,7 @@ ESC :: 0x1b
 
 CTRL_C :: 0x03
 CTRL_X :: 0x18
+CTRL_Q :: 0x11
 
 DEL :: 0x7e
 BKSP :: 0x7f
