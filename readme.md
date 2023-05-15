@@ -14,4 +14,4 @@ Part 1b: TextBuffer Abstraction: https://youtu.be/_8tVObGKQ3k
 
 Part 2: File to Screenspace: https://youtu.be/lRVL73DAFRQ
 
-Part 3: Saving, Movement, Cleanup: https://youtu.be/kCuhwDAlPm8 (Release Wednesday morning)
+Part 3: Saving, Movement, Cleanup: https://youtu.be/BLfCsqPcaFw
