@@ -153,3 +153,6 @@ EXTPROC :: 0o200000
 /* tcsetattr uses these */
 
 TCSAFLUSH :: 2
+
+VTIME :: 5
+VMIN :: 6

@@ -4,3 +4,4 @@ ols.json
 *.txt
 *.pdb
 out
+.vscode
